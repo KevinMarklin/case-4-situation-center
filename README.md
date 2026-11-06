@@ -40,6 +40,13 @@
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+
+# Запуск без веб-интерфейса:
 python 04_prototype.py
 python 04_prototype.py --incidents 01_data/incidents.csv --indicators 01_data/indicators.csv
 python 04_prototype.py --test
+
+## Запуск с веб-интерфейсом:
+streamlit run 04_prototype.py
+streamlit run 04_prototype.py -- --incidents 01_data/incidents.csv --indicators 01_data/indicators.csv
+streamlit run 04_prototype.py -- --test
