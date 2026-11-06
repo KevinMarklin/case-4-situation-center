@@ -674,7 +674,9 @@ def render_web():
     st.set_page_config(
     page_title='Ситуационный центр ИБ', layout='wide', page_icon='🛡️'
 )
+    from styles import hide_streamlit_style, color_severity, make_bold, make_lavand, color_sever
 
+    st.markdown(hide_streamlit_style, unsafe_allow_html=True)
     
     st.title('🛡️ Сводка работы ситуационного центра')
 
@@ -700,11 +702,44 @@ def render_web():
     # --- 2. ТАБЛИЦА С АЛЕРТАМИ (Основной реестр) ---
     st.subheader('Реестр активных оповещений')
 
-    alerts = pd.read_csv('alerts_out.csv') 
-    st.dataframe(alerts, use_container_width=True)
+    alerts = pd.read_csv('alerts_out.csv')
+    # Заменяем текстовые статусы на статусы со значками
+    alerts['severity'] = alerts['severity'].replace({
+    'CRITICAL': '🚨  CRITICAL',
+    'WARNING': '⚠️  WARNING',
+    'STALE': '🟣  STALE'
+    })
+
+    if 'severity' in alerts.columns:
+        styled_alerts = alerts.style.map(color_severity, subset=['severity'])\
+                                    .map(make_bold, subset=['location'])\
+                                    .map(make_bold, subset=['value'])\
+                                    .map(make_lavand, subset=['at'])\
+                                    .map(make_lavand, subset=['alert_id'])\
+                                    .map(color_sever, subset=['action'])
+        st.dataframe(styled_alerts, use_container_width=True)
+    else:
+        st.dataframe(alerts, use_container_width=True)
 
     audits = pd.read_csv('audit_out.csv')
-    st.dataframe(audits,use_container_width=True)
+    audits['to_status'] = audits['to_status'].replace({
+        'CRITICAL': '🚨  CRITICAL',
+        'WARNING': '⚠️  WARNING',
+        'STALE': '🟣  STALE'
+    })
+
+    if 'to_status' in audits.columns:
+            styled_audits = audits.style.map(color_severity, subset=['to_status'])\
+                                        .map(make_lavand, subset=['event_id'])\
+                                        .map(make_lavand, subset=['entity_type'])\
+                                        .map(make_lavand, subset=['entity_id'])\
+                                        .map(color_sever, subset=['action'])\
+                                        .map(make_bold, subset=['from_status'])\
+                                        .map(make_lavand, subset=['at'])\
+                                        .map(make_bold, subset=['ip'])
+            st.dataframe(styled_audits, use_container_width=True)
+    else:
+        st.dataframe(audits, use_container_width=True)
 
     st.markdown('---')
 
