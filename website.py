@@ -674,33 +674,38 @@ def render_web():
     st.set_page_config(
     page_title='Ситуационный центр ИБ', layout='wide', page_icon='🛡️'
 )
-    from styles import hide_streamlit_style, color_severity, make_bold, make_lavand, color_sever
+    from styles import hide_streamlit_style, color_severity, make_bold, make_lavand, color_sever, METRIC_CARD_CSS, BUTTON_AND_RESULT_CSS
 
     st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-    
-    st.title('🛡️ Сводка работы ситуационного центра')
+    st.markdown(METRIC_CARD_CSS, unsafe_allow_html=True)
+    st.markdown(BUTTON_AND_RESULT_CSS, unsafe_allow_html=True)
 
     # --- 1. БЛОК СТАТИСТИКИ (Верхняя часть консоли) ---
-    st.subheader('Общие показатели')
+    st.subheader("📊  Сводка работы ситуационного центра")
 
     #колонки для красивого расположения метрик в ряд
     col1, col2, col3, col4, = st.columns(4)
 
     with col1: 
-        st.metric(label='Обработано телеметрии', value='1')
-        st.metric(label='Инцидентов в реестре', value='15')
+        st.metric(label="🛡️  Инцидентов в реестре", value="15")
     with col2:
-        st.metric(label='Создано оповещений', value='12')
-        st.metric(label='Журнал аудита ИБ', value='9 полей')
+        st.metric(label="📡  Обработано телеметрии", value="1")
     with col3:
-        st.metric(label='Дубликатов (окно 5 мин)', value='3', delta='-2', delta_color='inverse')
+        st.metric(label="⚠️  Создано оповещений", value="12")
     with col4:
-        st.metric(label='Ошибок валидации / атак', value='0', delta='0')
+        st.metric(label="🔍  Журнал аудита ИБ", value="9 полей")
+
+    col5, col6, col7, col8 = st.columns(4)
+    with col5:
+        st.metric(label="🔄  Дубликатов (окно 5 мин)", value="3", delta="-2", delta_color="inverse")
+
+    with col6:
+        st.metric(label="❌  Ошибок валидации / атак", value="0", delta="0")
 
     st.markdown('---')
 
     # --- 2. ТАБЛИЦА С АЛЕРТАМИ (Основной реестр) ---
-    st.subheader('Реестр активных оповещений')
+    st.subheader('🔔 Реестр активных оповещений')
 
     alerts = pd.read_csv('alerts_out.csv')
     # Заменяем текстовые статусы на статусы со значками
@@ -745,108 +750,118 @@ def render_web():
 
     # --- 3. ИНТЕРАКТИВ ВМЕСТО КОНСОЛИ ---
     st.subheader('Управление тестированием')
-   
 
-    st.text(
+    st.write(
         'Запустить комплексные тесты Т4-1...Т4-5 и тесты ИБ (SEC-1...SEC-5)?'
-    )
+                        )
 
-    if st.button('🚀  Запустить тесты'):
-        with st.spinner('Выполнение тестов, пожалуйста подождите...'):
+    if "tests_run" not in st.session_state:
+        st.session_state.tests_run = False
 
-            time.sleep(2)
+
+    if not st.session_state.tests_run:
+
+        if st.button('🚀  Запустить тесты', key="run_tests_btn"):
+
+            st.toast("✅  Тесты успешно запущены!", icon="🚀")
+            st.session_state.tests_run = True
+            st.rerun()
+            
+    if st.session_state.tests_run:
+        with st.spinner("Выполняется"):
+                time.sleep(5)
+        
+                sites = load_sites()
+                if not sites:
+                    sites = {f"site_0{i}": {"name": f"Птичник {i}", "zone": "zone_A"} for i in range(1, 6)}
+
+                biz_results = []
+                    
+                # T4-1
+                inc = {"incident_id": "inc_test_01", "status": "NEW", "responsible": None}
+                ok_1, _ = transition_incident(inc, "ASSIGNED", actor_role="диспетчер")
+                inc["status"] = "ASSIGNED"
+                inc["responsible"] = "e_101"
+                ok_2, _ = transition_incident(inc, "IN_PROGRESS", actor_role="инженер")
+                bad_transition, _ = transition_incident({"status": "NEW"}, "CLOSED", actor_role="диспетчер")
+                t4_1_passed = ok_1 and ok_2 and (not bad_transition)
+                biz_results.append(("T4-1", "Создание и назначение инцидента", "NEW -> ASSIGNED, переход NEW -> CLOSED запрещён", "Переходы валидны, аудит зафиксирован", t4_1_passed))
+                    
+                # T4-2
+                row_t2 = {"time": "2025-11-01T10:00:00Z", "location": "site_02", "indicator": "temperature", "value": "28.3", "norm_min": "20.0", "norm_max": "26.0"}
+                res_t2 = check_indicator(row_t2, sites, {}, {})
+                sev_t2, act_t2 = res_t2 if res_t2 else (None, None)
+                t4_2_passed = (sev_t2 == "WARNING" and act_t2 == "ALERT_CREATED")
+                biz_results.append(("T4-2", "Превышение порога (28.3°C при норме 26°C)", "deviation=8.8% -> severity=WARNING", f"severity={sev_t2}, action={act_t2}", t4_2_passed))
+                    
+                # T4-3
+                row_t3 = {"time": "2025-11-01T10:00:00Z", "location": "site_99", "indicator": "temperature", "value": "28.3", "norm_min": "20.0", "norm_max": "26.0"}
+                res_t3 = check_indicator(row_t3, sites, {}, {})
+                t4_3_passed = (res_t3 == ("ERROR", "UNKNOWN_LOCATION"))
+                biz_results.append(("T4-3", "Неверная локация (site_99 не в sites.csv)", "ERROR / UNKNOWN_LOCATION, отказ в регистрации", f"Статус={res_t3[0]}, Код={res_t3[1]}", t4_3_passed))
+                    
+                # T4-4
+                seen_test = {}
+                row_t4_a = {"time": "2025-11-01T10:00:00Z", "location": "site_01", "indicator": "temperature", "value": "30.0", "norm_min": "20.0", "norm_max": "26.0"}
+                row_t4_b = {"time": "2025-11-01T10:03:00Z", "location": "site_01", "indicator": "temperature", "value": "31.0", "norm_min": "20.0", "norm_max": "26.0"}
+                res_a = check_indicator(row_t4_a, sites, seen_test, {})
+                res_b = check_indicator(row_t4_b, sites, seen_test, {})
+                t4_4_passed = (res_a[0] == "CRITICAL" and res_b == ("DUPLICATE", "IGNORED"))
+                biz_results.append(("T4-4", "Повтор события за 3 мин (<5 мин)", "1-й принят, 2-й -> DUPLICATE / IGNORED", f"Событие 1: {res_a[0]}, Событие 2: {res_b[0]}", t4_4_passed))
+                    
+                # T4-5
+                row_t5 = {"time": "2025-11-01T10:00:00Z", "location": "site_03", "indicator": "ventilation", "value": "", "norm_min": "0.8", "norm_max": "2.0"}
+                res_t5 = check_indicator(row_t5, sites, {}, {})
+                sev_t5, act_t5 = res_t5 if res_t5 else (None, None)
+                t4_5_passed = (sev_t5 == "STALE" and act_t5 == "ESCALATED")
+                biz_results.append(("T4-5", "Датчик offline (value='')", "severity=STALE, action=ESCALATED", f"severity={sev_t5}, action={act_t5}", t4_5_passed))
+
+                # --- 2. ТЕСТЫ ИНФОРМАЦИОННОЙ БЕЗОПАСНОСТИ (11_ИБ.md) ---
+                sec_results = []
+                
+                # SEC-1: Валидация подлинной HMAC-подписи (U-1)
+                sig_valid = calculate_telemetry_signature("2025-11-01T12:00:00Z", "site_01", "temperature", "25.0")
+                row_sec1 = {"time": "2025-11-01T12:00:00Z", "location": "site_01", "indicator": "temperature", "value": "25.0", "signature": sig_valid}
+                sec1_passed = verify_telemetry_hmac(row_sec1)
+                sec_results.append(("SEC-1", "HMAC: проверка легитимной подписи датчика", "Подпись совпадает -> True", f"Проверка={sec1_passed}", sec1_passed))
+                
+                # SEC-2: Отклонение поддельного значения / неверной подписи (U-1)
+                row_sec2 = {"time": "2025-11-01T12:00:00Z", "location": "site_01", "indicator": "temperature", "value": "29.9", "signature": sig_valid}
+                sec2_passed = not verify_telemetry_hmac(row_sec2)
+                sec_results.append(("SEC-2", "HMAC: отсечение подделки (значение подменено)", "Подпись не совпадает -> False", f"Отсечено={sec2_passed}", sec2_passed))
+                
+                # SEC-3: RBAC — запрет диспетчеру закрывать рабочий инцидент (U-2)
+                inc_assigned = {"incident_id": "inc_sec_03", "status": "IN_PROGRESS", "responsible": "e_101"}
+                bad_close, code = transition_incident(inc_assigned, "CLOSED", actor_role="диспетчер")
+                sec3_passed = (not bad_close) and (code == "PERMISSION_DENIED")
+                sec_results.append(("SEC-3", "RBAC: запрет закрытия инцидента диспетчером", "PERMISSION_DENIED", f"Разрешено={bad_close}, Код={code}", sec3_passed))
+                
+                # SEC-4: Разграничение зон доступа (zone_A vs zone_C) (U-3)
+                engineer_zone_ok = check_zone_access("инженер", user_zone="zone_A", target_zone="zone_A")
+                engineer_zone_deny = check_zone_access("инженер", user_zone="zone_A", target_zone="zone_C")
+                sec4_passed = engineer_zone_ok and (not engineer_zone_deny)
+                sec_results.append(("SEC-4", "RBAC: изоляция зон (инженер zone_A -> zone_C)", "Доступ в чужую зону блокирован", f"Своя={engineer_zone_ok}, Чужая={engineer_zone_deny}", sec4_passed))
+                
+                # SEC-5: Неизменяемость аудита — запрет удаления (U-7)
+                sec5_passed = not check_rbac_permission("delete_audit", "администратор")
+                sec_results.append(("SEC-5", "Аудит: запрет удаления логов администратором", "delete_audit -> False для всех ролей", f"Запрет удаления={sec5_passed}", sec5_passed))
     
-            sites = load_sites()
-            if not sites:
-                sites = {f"site_0{i}": {"name": f"Птичник {i}", "zone": "zone_A"} for i in range(1, 6)}
+        st.success('✅ Комплексные тесты и тесты ИБ успешно выполнены!')
 
-            biz_results = []
-                
-            # T4-1
-            inc = {"incident_id": "inc_test_01", "status": "NEW", "responsible": None}
-            ok_1, _ = transition_incident(inc, "ASSIGNED", actor_role="диспетчер")
-            inc["status"] = "ASSIGNED"
-            inc["responsible"] = "e_101"
-            ok_2, _ = transition_incident(inc, "IN_PROGRESS", actor_role="инженер")
-            bad_transition, _ = transition_incident({"status": "NEW"}, "CLOSED", actor_role="диспетчер")
-            t4_1_passed = ok_1 and ok_2 and (not bad_transition)
-            biz_results.append(("T4-1", "Создание и назначение инцидента", "NEW -> ASSIGNED, переход NEW -> CLOSED запрещён", "Переходы валидны, аудит зафиксирован", t4_1_passed))
-                
-            # T4-2
-            row_t2 = {"time": "2025-11-01T10:00:00Z", "location": "site_02", "indicator": "temperature", "value": "28.3", "norm_min": "20.0", "norm_max": "26.0"}
-            res_t2 = check_indicator(row_t2, sites, {}, {})
-            sev_t2, act_t2 = res_t2 if res_t2 else (None, None)
-            t4_2_passed = (sev_t2 == "WARNING" and act_t2 == "ALERT_CREATED")
-            biz_results.append(("T4-2", "Превышение порога (28.3°C при норме 26°C)", "deviation=8.8% -> severity=WARNING", f"severity={sev_t2}, action={act_t2}", t4_2_passed))
-                
-            # T4-3
-            row_t3 = {"time": "2025-11-01T10:00:00Z", "location": "site_99", "indicator": "temperature", "value": "28.3", "norm_min": "20.0", "norm_max": "26.0"}
-            res_t3 = check_indicator(row_t3, sites, {}, {})
-            t4_3_passed = (res_t3 == ("ERROR", "UNKNOWN_LOCATION"))
-            biz_results.append(("T4-3", "Неверная локация (site_99 не в sites.csv)", "ERROR / UNKNOWN_LOCATION, отказ в регистрации", f"Статус={res_t3[0]}, Код={res_t3[1]}", t4_3_passed))
-                
-             # T4-4
-            seen_test = {}
-            row_t4_a = {"time": "2025-11-01T10:00:00Z", "location": "site_01", "indicator": "temperature", "value": "30.0", "norm_min": "20.0", "norm_max": "26.0"}
-            row_t4_b = {"time": "2025-11-01T10:03:00Z", "location": "site_01", "indicator": "temperature", "value": "31.0", "norm_min": "20.0", "norm_max": "26.0"}
-            res_a = check_indicator(row_t4_a, sites, seen_test, {})
-            res_b = check_indicator(row_t4_b, sites, seen_test, {})
-            t4_4_passed = (res_a[0] == "CRITICAL" and res_b == ("DUPLICATE", "IGNORED"))
-            biz_results.append(("T4-4", "Повтор события за 3 мин (<5 мин)", "1-й принят, 2-й -> DUPLICATE / IGNORED", f"Событие 1: {res_a[0]}, Событие 2: {res_b[0]}", t4_4_passed))
-                
-             # T4-5
-            row_t5 = {"time": "2025-11-01T10:00:00Z", "location": "site_03", "indicator": "ventilation", "value": "", "norm_min": "0.8", "norm_max": "2.0"}
-            res_t5 = check_indicator(row_t5, sites, {}, {})
-            sev_t5, act_t5 = res_t5 if res_t5 else (None, None)
-            t4_5_passed = (sev_t5 == "STALE" and act_t5 == "ESCALATED")
-            biz_results.append(("T4-5", "Датчик offline (value='')", "severity=STALE, action=ESCALATED", f"severity={sev_t5}, action={act_t5}", t4_5_passed))
-
-            # --- 2. ТЕСТЫ ИНФОРМАЦИОННОЙ БЕЗОПАСНОСТИ (11_ИБ.md) ---
-            sec_results = []
-            
-            # SEC-1: Валидация подлинной HMAC-подписи (U-1)
-            sig_valid = calculate_telemetry_signature("2025-11-01T12:00:00Z", "site_01", "temperature", "25.0")
-            row_sec1 = {"time": "2025-11-01T12:00:00Z", "location": "site_01", "indicator": "temperature", "value": "25.0", "signature": sig_valid}
-            sec1_passed = verify_telemetry_hmac(row_sec1)
-            sec_results.append(("SEC-1", "HMAC: проверка легитимной подписи датчика", "Подпись совпадает -> True", f"Проверка={sec1_passed}", sec1_passed))
-            
-            # SEC-2: Отклонение поддельного значения / неверной подписи (U-1)
-            row_sec2 = {"time": "2025-11-01T12:00:00Z", "location": "site_01", "indicator": "temperature", "value": "29.9", "signature": sig_valid}
-            sec2_passed = not verify_telemetry_hmac(row_sec2)
-            sec_results.append(("SEC-2", "HMAC: отсечение подделки (значение подменено)", "Подпись не совпадает -> False", f"Отсечено={sec2_passed}", sec2_passed))
-            
-            # SEC-3: RBAC — запрет диспетчеру закрывать рабочий инцидент (U-2)
-            inc_assigned = {"incident_id": "inc_sec_03", "status": "IN_PROGRESS", "responsible": "e_101"}
-            bad_close, code = transition_incident(inc_assigned, "CLOSED", actor_role="диспетчер")
-            sec3_passed = (not bad_close) and (code == "PERMISSION_DENIED")
-            sec_results.append(("SEC-3", "RBAC: запрет закрытия инцидента диспетчером", "PERMISSION_DENIED", f"Разрешено={bad_close}, Код={code}", sec3_passed))
-            
-            # SEC-4: Разграничение зон доступа (zone_A vs zone_C) (U-3)
-            engineer_zone_ok = check_zone_access("инженер", user_zone="zone_A", target_zone="zone_A")
-            engineer_zone_deny = check_zone_access("инженер", user_zone="zone_A", target_zone="zone_C")
-            sec4_passed = engineer_zone_ok and (not engineer_zone_deny)
-            sec_results.append(("SEC-4", "RBAC: изоляция зон (инженер zone_A -> zone_C)", "Доступ в чужую зону блокирован", f"Своя={engineer_zone_ok}, Чужая={engineer_zone_deny}", sec4_passed))
-            
-            # SEC-5: Неизменяемость аудита — запрет удаления (U-7)
-            sec5_passed = not check_rbac_permission("delete_audit", "администратор")
-            sec_results.append(("SEC-5", "Аудит: запрет удаления логов администратором", "delete_audit -> False для всех ролей", f"Запрет удаления={sec5_passed}", sec5_passed))
-
-        st.success('Комплексные тесты и тесты ИБ успешно выполнены!')
-
-        #Вывод с таблицы T1-T4:
+            #Вывод с таблицы T1-T4:
 
         st.subheader('Результаты верификации бизнес-сценариев (03_тесты.md)')
         rows = []
         for tid, desc, exp, fact, passed in biz_results:
             status_text = "✓ PASSED" if passed else "✖ FAILED"
             rows.append({
-                    "Тест": tid,
-                    "Описание проверки": desc,
-                    "Ожидание": exp,
-                    "Факт прототипа": fact,
-                    "Статус": status_text,
-                })
-        df = pd.DataFrame(rows)
+                        "Тест": tid,
+                        "Описание проверки": desc,
+                        "Ожидание": exp,
+                        "Факт прототипа": fact,
+                        "Статус": status_text,
+                    })
+            df = pd.DataFrame(rows)
 
         def color_status(val):
             color = "green" if "PASSED" in val else "red"
@@ -859,24 +874,24 @@ def render_web():
 
         st.dataframe(
             df.style.map(color_status,subset=["Статус"]).map(color_test_name_blue,subset = ["Тест"]),
-            use_container_width=True,
-            hide_index=True,
-            )
+                use_container_width=True,
+                hide_index=True,
+                )
         st.markdown('---')
 
-        #Вывод с таблицы SEC1-SEC4:
+            #Вывод с таблицы SEC1-SEC4:
 
         st.subheader('Верификация контура информационной безопасности (11_ИБ.md)')
         sec_rows = []
         for tid, desc, exp, fact, passed in sec_results:
-            status_text = "✓ PASSED" if passed else "✖ FAILED"
-            sec_rows.append ({
-                "Тест": tid,
-                "Механизм защиты": desc,
-                "Ожидание": exp,
-                "Факт прототипа": fact,
-                "Статус": status_text,
-            })
+                status_text = "✓ PASSED" if passed else "✖ FAILED"
+                sec_rows.append ({
+                    "Тест": tid,
+                    "Механизм защиты": desc,
+                    "Ожидание": exp,
+                    "Факт прототипа": fact,
+                    "Статус": status_text,
+                })
         df_sec = pd.DataFrame(sec_rows)
 
         def color_test_name_yellow(val):
@@ -885,11 +900,15 @@ def render_web():
             return ""
 
         st.dataframe(
-            df_sec.style.map(color_status,subset=["Статус"]).map(color_test_name_yellow, subset=["Тест"]),
-            use_container_width=True,
-            hide_index=True,
-        )
+                df_sec.style.map(color_status,subset=["Статус"]).map(color_test_name_yellow, subset=["Тест"]),
+                use_container_width=True,
+                hide_index=True,
+            )
         st.markdown('---')
+
+        if st.button("🔄  Сбросить результаты", key="reset_tests_btn"):
+                st.session_state.tests_run = False
+                st.rerun()
         
 #===================================================
 #===================================================
