@@ -19,11 +19,13 @@ audit_out.csv
 .idea/
 *.sublime-project
 *.sublime-workspace
+.obsidian
 
 # Системные файлы ОС
 .DS_Store
 Thumbs.db
 desktop.ini
+
 
 # Логи и временные файлы
 *.log
