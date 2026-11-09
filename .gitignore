@@ -20,6 +20,7 @@ audit_out.csv
 *.sublime-project
 *.sublime-workspace
 .obsidian
+.~WRL0003.tmp
 
 # Системные файлы ОС
 .DS_Store
