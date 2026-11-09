@@ -25,6 +25,28 @@ import sys
 import time
 from datetime import datetime
 
+
+def ensure_streamlit_theme_config():
+    """Автоматически создаёт .streamlit/config.toml, если его нет в репозитории."""
+    streamlit_dir = os.path.join(BASE_DIR, ".streamlit")
+    config_file = os.path.join(streamlit_dir, "config.toml")
+    
+    config_content = """[theme]
+base = "dark"
+primaryColor = "#58A6FF"
+backgroundColor = "#0D1117"
+secondaryBackgroundColor = "#161B22"
+textColor = "#C9D1D9"
+font = "sans serif"
+"""
+    try:
+        os.makedirs(streamlit_dir, exist_ok=True)
+        if not os.path.exists(config_file):
+            with open(config_file, "w", encoding="utf-8") as f:
+                f.write(config_content)
+    except Exception:
+        pass
+
 # ============================================================================
 # 1. ПОДКЛЮЧЕНИЕ RICH С БЕЗОПАСНЫМ FALLBACK ДЛЯ ТЕРМИНАЛА
 # ============================================================================
@@ -922,7 +944,15 @@ def main():
     # Быстрый запуск веб-сайта прямо из обычной команды python
     if "--web" in sys.argv:
         print_info("Запуск веб-интерфейса Ситуационного центра в браузере...")
-        subprocess.run([sys.executable, "-m", "streamlit", "run", os.path.abspath(__file__)])
+        subprocess.run([
+            sys.executable, "-m", "streamlit", "run", os.path.abspath(__file__),
+            "--theme.base=dark",
+            "--theme.primaryColor=#58A6FF",
+            "--theme.backgroundColor=#0D1117",
+            "--theme.secondaryBackgroundColor=#161B22",
+            "--theme.textColor=#C9D1D9",
+            "--theme.font=sans serif"
+        ])
         sys.exit(0)
 
     render_header()
@@ -994,6 +1024,7 @@ def main():
 
 if __name__ == "__main__":
     if is_running_in_streamlit():
+        ensure_streamlit_theme_config()
         render_web()
     else:
         main()

@@ -61,6 +61,7 @@ $$\Delta\% = \frac{norm\_min - value}{norm\_min} \times 100\% \quad (\text{ес�
 [NEW] ──(Назначение инженера)──► [ASSIGNED] ──(Выезд в цех)──► [IN_PROGRESS] ──(Отчёт о ремонте)──► [CLOSED]
                                       │
                                       └──(Ложный вызов, NO_ACTION)──► [CLOSED]
+```
 
 ---
 
